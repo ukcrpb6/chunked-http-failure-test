@@ -9,7 +9,9 @@ import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.AbstractHttpEntity;
 import org.apache.http.entity.InputStreamEntity;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
@@ -37,6 +39,8 @@ public class ChunkedRestTomcatTest extends CamelTestSupport {
 
   @EndpointInject(uri = "mock:result")
   private MockEndpoint result;
+  private CloseableHttpClient client;
+  private HttpPost post;
 
   @Override
   protected void doPreSetup() throws Exception {
@@ -47,6 +51,9 @@ public class ChunkedRestTomcatTest extends CamelTestSupport {
     Tomcat.addServlet(context, SERVLET_NAME, new CamelHttpTransportServlet());
     context.addServletMapping("/*", SERVLET_NAME);
     tc.start();
+
+    client = HttpClients.createDefault();
+    post = new HttpPost("http://localhost:" + tc.getConnector().getPort() + "/test");
   }
 
   @Override
@@ -54,6 +61,7 @@ public class ChunkedRestTomcatTest extends CamelTestSupport {
   public void tearDown() throws Exception {
     super.tearDown();
     tc.stop();
+    client.close();
   }
 
   @Override
@@ -74,19 +82,28 @@ public class ChunkedRestTomcatTest extends CamelTestSupport {
   }
 
   @Test
-  public void testName() throws Exception {
+  public void testChunked() throws Exception {
+    /*
+     * With an InputStream the http post uses HTTP/1.1 chunked transfer encoding, the tomcat CoyoteInputStream that
+     * is retrieved in the HttpMessage returns 0 for .available() which causes this to treat the message as having no
+     * body despite the fact that if you read the stream all the data is available.
+     */
+    try (InputStream inputStream = new ByteArrayInputStream(EXPECTED_INPUT.getBytes("UTF-8"))) {
+      sendAndVerifyEntity(new InputStreamEntity(inputStream));
+    }
+  }
+
+  @Test
+  public void testUnchunked() throws Exception {
+    sendAndVerifyEntity(new StringEntity(EXPECTED_INPUT));
+  }
+
+  private void sendAndVerifyEntity(AbstractHttpEntity entity) throws Exception {
     result.setExpectedCount(1);
 
-    String baseUri = "http://localhost:" + tc.getConnector().getPort();
-    try (CloseableHttpClient client = HttpClients.createDefault()) {
-      HttpPost post = new HttpPost(baseUri + "/test");
-      try (InputStream inputStream = new ByteArrayInputStream(EXPECTED_INPUT.getBytes("UTF-8"))) {
-        InputStreamEntity test = new InputStreamEntity(inputStream);
-        post.setEntity(test);
-        try (CloseableHttpResponse response = client.execute(post)) {
-          EntityUtils.consume(response.getEntity());
-        }
-      }
+    post.setEntity(entity);
+    try (CloseableHttpResponse response = client.execute(post)) {
+      EntityUtils.consume(response.getEntity());
     }
 
     result.message(0).body().isEqualTo(EXPECTED_INPUT);
