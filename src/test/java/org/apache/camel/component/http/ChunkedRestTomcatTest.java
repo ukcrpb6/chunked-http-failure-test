@@ -82,7 +82,6 @@ public class ChunkedRestTomcatTest extends CamelTestSupport {
       HttpPost post = new HttpPost(baseUri + "/test");
       try (InputStream inputStream = new ByteArrayInputStream(EXPECTED_INPUT.getBytes("UTF-8"))) {
         InputStreamEntity test = new InputStreamEntity(inputStream);
-        test.setChunked(false);
         post.setEntity(test);
         try (CloseableHttpResponse response = client.execute(post)) {
           EntityUtils.consume(response.getEntity());
