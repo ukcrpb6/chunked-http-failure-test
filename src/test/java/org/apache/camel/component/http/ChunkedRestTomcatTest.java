@@ -42,7 +42,7 @@ public class ChunkedRestTomcatTest extends CamelTestSupport {
   protected void doPreSetup() throws Exception {
     super.doPreSetup();
     tc = new Tomcat();
-    tc.setPort(8085);
+    tc.setPort(PortAcquirer.getUnboundPort());
     Context context = tc.addContext("/", folder.getRoot().getAbsolutePath());
     Tomcat.addServlet(context, SERVLET_NAME, new CamelHttpTransportServlet());
     context.addServletMapping("/*", SERVLET_NAME);
